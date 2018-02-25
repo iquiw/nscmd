@@ -1,0 +1,7 @@
+[package]
+name = "nscmd"
+version = "0.1.0"
+authors = ["Iku Iwasa <iku.iwasa@gmail.com>"]
+
+[dependencies]
+tempdir = "*"
