@@ -1,8 +1,10 @@
 extern crate tempdir;
 
 use std::env;
-use std::io::Result;
+use std::error::Error;
+use std::fmt::Display;
 use std::os::unix::fs;
+use std::path::Path;
 use std::process::{exit, Command, ExitStatus};
 
 use tempdir::TempDir;
@@ -22,6 +24,21 @@ struct NsCmd {
     nscmd_opts: NsCmdArgs,
 }
 
+#[derive(Debug)]
+struct NsCmdErr(String);
+
+impl Display for NsCmdErr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        f.write_str(&self.0)
+    }
+}
+
+impl Error for NsCmdErr {
+    fn description(&self) -> &str {
+        &self.0
+    }
+}
+
 fn main() {
     match nscmd_main() {
         Ok(status) => match status.code() {
@@ -32,7 +49,7 @@ fn main() {
     }
 }
 
-fn nscmd_main() -> Result<ExitStatus> {
+fn nscmd_main() -> Result<ExitStatus, Box<Error>> {
     let nscmd = NsCmd::new()?;
     nscmd.setup_trans()?;
     nscmd.run_cmd()
@@ -52,7 +69,6 @@ fn process_args() -> NsCmdArgs {
                 actual_cmd: arg[index + 1..].to_string(),
             });
         } else {
-            println!("{}", arg);
             trans_end = true;
             args.push(arg.to_string());
         }
@@ -64,24 +80,28 @@ fn process_args() -> NsCmdArgs {
 }
 
 impl NsCmd {
-    fn new() -> Result<Self> {
+    fn new() -> Result<Self, Box<Error>> {
         Ok(NsCmd {
             nscmd_dir: TempDir::new("nscmd-bin")?,
             nscmd_opts: process_args(),
         })
     }
 
-    fn setup_trans(&self) -> Result<()> {
+    fn setup_trans(&self) -> Result<(), Box<Error>> {
         for cmd_tr in &self.nscmd_opts.cmd_trans {
             let called = self.nscmd_dir.path().join(&cmd_tr.called_cmd);
-            let actual = &cmd_tr.actual_cmd;
-            println!("{} -> {}", actual, called.display());
+            let actual = Path::new(&cmd_tr.actual_cmd);
+            if actual.is_file() {
+                println!("{} -> {}", &cmd_tr.actual_cmd, called.display());
+            } else {
+                return Err(Box::new(NsCmdErr(format!("{} does not exist", &cmd_tr.actual_cmd))));
+            }
             fs::symlink(actual, &called)?;
         }
         Ok(())
     }
 
-    fn run_cmd(&self) -> Result<ExitStatus> {
+    fn run_cmd(&self) -> Result<ExitStatus, Box<Error>> {
         let mut cmd = Command::new(&self.nscmd_opts.cmd_args[0]);
         for arg in &self.nscmd_opts.cmd_args[1..] {
             cmd.arg(arg);
@@ -91,6 +111,6 @@ impl NsCmd {
             path.push(":");
             path.push(&cur_path);
         }
-        cmd.env("PATH", &path).status()
+        Ok(cmd.env("PATH", &path).status()?)
     }
 }
