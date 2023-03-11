@@ -2,6 +2,7 @@
 name = "nscmd"
 version = "0.1.0"
 authors = ["Iku Iwasa <iku.iwasa@gmail.com>"]
+edition = "2021"
 
 [dependencies]
-tempdir = "*"
+tempfile = "3.4.0"
